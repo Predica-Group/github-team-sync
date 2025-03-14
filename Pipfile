@@ -7,7 +7,7 @@ verify_ssl = true
 pytest = "*"
 pytest-mock = "*"
 isort = "*"
-black = "==21.11b1"
+black = "*"
 pre-commit = "*"
 pylint = "*"
 seed-isort-config = "*"
@@ -26,9 +26,17 @@ msal = "*"
 okta = "*"
 asyncio = "*"
 onelogin = "*"
+google-api-python-client = "*"
+google-auth-oauthlib = "*"
+certifi = "*"
+setuptools = "*"
+cryptography = "*"
+werkzeug = "*"
+importlib-metadata = "*"
+python-keycloak = "*"
 
 [pipenv]
-allow_prereleases = true
+allow_prereleases = false
 
 [requires]
 python_version = "3.9"

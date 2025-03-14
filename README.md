@@ -10,6 +10,8 @@ It supports both GitHub.com, GitHub Enterprise Server (GHES) and GitHub, but it 
 - Azure AD
 - Okta
 - OneLogin
+- Google Workspace
+- Keycloak
 
 ## Features
 This utility provides the following functionality:
@@ -18,7 +20,7 @@ This utility provides the following functionality:
 | --- | --- | --- |
 | Sync Users | Yes | Add or remove users from `Teams` in GitHub to keep in sync with Active Directory groups |
 | Dynamic Config | Yes | Utilize a `settings` file to derive Active Directory and GitHub settings |
-| LDAP SSL | No | SSL or TLS connections. This is a WIP |
+| LDAP SSL | Yes | SSL or TLS connections. |
 | Failure notifications | Yes | Presently supports opening a GitHub issue when sync failed. The repo is configurable. |
 | Sync on new team | Yes | Synchronize users when a new team is created |
 | Sync on team edit | No | This event is not processed currently |
@@ -72,8 +74,12 @@ This app requires the following Azure permissions:
 - `GroupMember.Read.All`
 - `User.Read.All`
 
+#### Keycloak Permissions
+If you have `ADMIN_FINE_GRAINED_AUTHZ` enabled, you only need the following permission for the user realm:
+- `view-users`
+
 ## Getting Started
-To get started, ensure that you are using **Python 3.4+**. The following additional libraries are required:
+To get started, ensure that you are using **Python 3.9** (or update your `Pipfile` to the version you're running, 3.4+). The following additional libraries are required:
 
 - [ ] Flask
 - [ ] github3.py
@@ -85,6 +91,7 @@ To get started, ensure that you are using **Python 3.4+**. The following additio
 - [ ] asyncio
 - [ ] okta
 - [ ] onelogin
+- [ ] python-keycloak
 
 Install the required libraries.
 
@@ -180,6 +187,15 @@ OKTA_SCOPES='okta.users.read okta.groups.read'
 OKTA_PRIVATE_KEY='{"kty": "RSA", ...}'
 ```
 
+### Sample `.env` for Keycloak
+```env
+KEYCLOAK_USERNAME=api-account
+KEYCLOAK_PASSWORD=ExamplePassword
+KEYCLOAK_REALM=ExampleCorp
+KEYCLOAK_ADMIN_REALM=master
+KEYCLOAK_USE_GITHUB_IDP=true
+```
+
 ### Sample `.env` for OneLogin
 ```env
 ONELOGIN_CLIENT_ID='asdafsflkjlk13q33433445wee'
@@ -197,11 +213,28 @@ ISSUE_ASSIGNEE=githubber
 SYNC_SCHEDULE=0 * * * *
 TEST_MODE=false
 SYNCMAP_ONLY=false
+EMU_SHORTCODE=volcano
 
 ### Automatically add users missing from the organization
 ADD_MEMBER=false
 ## Automatically remove users from the organization that are not part of a team
 REMOVE_ORG_MEMBERS_WITHOUT_TEAM=false
+```
+
+### Sample `.env` setting for flask app
+```env
+####################
+## Flask Settings ##
+####################
+## Default: app, comment out to run once as a script
+FLASK_APP=app
+## Default: production
+FLASK_ENV=development
+## Default: 5000
+FLASK_RUN_PORT=5000
+## Default: 127.0.0.1
+FLASK_RUN_HOST=0.0.0.0
+
 ```
 
 ### Sample `syncmap.yml` custom mapping file
@@ -210,10 +243,12 @@ REMOVE_ORG_MEMBERS_WITHOUT_TEAM=false
 mapping:
   - github: demo-team
     directory: ldap super users
+    org: my github org
   - github: demo-admin-2
     directory: some other group
 ```
-The custom map uses slugs that are lowercase.
+
+The custom map uses slugs that are lowercase. If you don't specify organization name, it will synchronize all teams with same name in any organization. 
 
 ## Usage Examples
 

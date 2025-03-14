@@ -1,4 +1,5 @@
 import atexit
+from operator import truediv
 import os
 import time
 import json
@@ -65,9 +66,15 @@ def sync_team(client=None, owner=None, team_id=None, slug=None):
     try:
         org = client.organization(owner)
         team = org.team(team_id)
-        custom_map, ignore_users = load_custom_map()
+        custom_map, group_prefix, ignore_users = load_custom_map()
         try:
-            directory_group = custom_map[slug] if slug in custom_map else slug
+            directory_group = get_directory_from_slug(slug, custom_map, org)
+            # If we're filtering on group prefix, skip if the group doesn't match
+            if len(group_prefix) > 0 and not directory_group.startswith(
+                tuple(group_prefix)
+            ):
+                print(f"skipping team {team.slug} - not in group prefix")
+                return
             directory_members = directory_group_members(group=directory_group)
         except Exception as e:
             directory_members = []
@@ -249,17 +256,24 @@ def load_custom_map(file="syncmap.yml"):
     """
     syncmap = {}
     ignore_users = []
+    group_prefix = []
     if os.path.isfile(file):
         from yaml import load, Loader
 
         with open(file, "r") as f:
             data = load(f, Loader=Loader)
-        for d in data["mapping"]:
-            syncmap[d["github"]] = d["directory"]
-
+        if "mapping" in data:
+            for d in data["mapping"]:
+                if "org" in d:
+                    syncmap[(d["org"], d["github"])] = d["directory"]
+                else:
+                    syncmap[d["github"]] = d["directory"]
+        else:
+            syncmap = {}
+        group_prefix = data.get("group_prefix", [])
         ignore_users = data.get("ignore_users", [])
 
-    return (syncmap, ignore_users)
+    return (syncmap, group_prefix, ignore_users)
 
 
 def get_app_installations():
@@ -289,7 +303,7 @@ def sync_all_teams():
     print(f'Syncing all teams: {time.strftime("%A, %d. %B %Y %I:%M:%S %p")}')
 
     installations = get_app_installations()
-    custom_map, _ = load_custom_map()
+    custom_map, _, _ = load_custom_map()
     futures = []
     install_count = 0
     with ThreadPoolExecutor(max_workers=10) as exe:
@@ -345,7 +359,7 @@ def remove_org_members_without_team(installations):
 def sync_team_helper(team, custom_map, client, org):
     print(f"Organization: {org.login}")
     try:
-        if SYNCMAP_ONLY and team.slug not in custom_map:
+        if SYNCMAP_ONLY and not is_team_in_map(team.slug, custom_map, org):
             print(f"skipping team {team.slug} - not in sync map")
             return
         sync_team(
@@ -360,11 +374,33 @@ def sync_team_helper(team, custom_map, client, org):
         print(f"DEBUG: {e}")
 
 
-thread = threading.Thread(target=sync_all_teams)
-thread.start()
+def is_team_in_map(slug, custom_map, org):
+    key_with_org = (org.login, slug)
+    key_without_org = slug
+    if key_with_org in custom_map or key_without_org in custom_map:
+        return True
+    else:
+        return False
+
+
+def get_directory_from_slug(slug, custom_map, org):
+    if not is_team_in_map(slug, custom_map, org):
+        return slug
+    elif (org.login, slug) in custom_map:
+        return custom_map[(org.login, slug)]
+    elif slug in custom_map:
+        return custom_map[slug]
+
+
+if "FLASK_APP" in os.environ:
+    thread = threading.Thread(target=sync_all_teams)
+    thread.start()
 
 if __name__ == "__main__":
-    app.run(
-        host=os.environ.get("FLASK_RUN_HOST", "0.0.0.0"),
-        port=os.environ.get("FLASK_RUN_PORT", "5000"),
-    )
+    if "FLASK_APP" in os.environ:
+        app.run(
+            host=os.environ.get("FLASK_RUN_HOST", "0.0.0.0"),
+            port=os.environ.get("FLASK_RUN_PORT", "5000"),
+        )
+    else:
+        sync_all_teams()
